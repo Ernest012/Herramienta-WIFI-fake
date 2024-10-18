@@ -13,4 +13,4 @@ Tambien tendra que tener instalado Apache2, dnsmasq, PHP, tambien se utilzaran h
 
 Al igual que debera tener una antena de red conectada a su maquina para que funcione de manera correcta
 
-Este script fue hecho con intenciones de aprendizaje no deberia utilzarse para actividades ilagales o no eticas
+Este script fue hecho con intenciones de aprendizaje no deberia utilzarse para actividades ilegales o no eticas
