@@ -12,8 +12,11 @@ address=/#/10.0.0.1
 
 # Opciones adicionales
 domain-needed
+
 bogus-priv
+
 no-resolv
+
 server=8.8.8.8  # DNS de Google
 
 Tambien tendra que tener instalado Apache2, dnsmasq, PHP, tambien se utilzaran herramientas como airbase o aircrack pero estas ya estan instaladas en sistemas operativos Kali linux y Parrot OS que es donde se recomienda ejecutar el script
